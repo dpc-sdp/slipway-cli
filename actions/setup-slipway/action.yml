@@ -1,0 +1,38 @@
+name: setup-slipway
+description: Download the slipway CLI for the current runner, add it to PATH, and configure it to authenticate via GitHub Actions OIDC token exchange.
+author: dpc-sdp
+
+inputs:
+  version:
+    description: Release version to install. Use latest, vX.Y.Z, or X.Y.Z.
+    required: false
+    default: latest
+  api-base-url:
+    description: Slipway API base URL
+    required: true
+  github-token:
+    description: Deprecated and ignored. Releases are public, so no token is needed.
+    required: false
+    default: ""
+  repo:
+    description: GitHub repository containing release assets.
+    required: false
+    default: dpc-sdp/slipway-cli
+
+outputs:
+  version:
+    description: Installed release tag.
+    value: ${{ steps.install.outputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install slipway
+      id: install
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_REPO: ${{ inputs.repo }}
+        INPUT_GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_API_BASE_URL: ${{ inputs.api-base-url }}
+      run: bash "${GITHUB_ACTION_PATH}/install.sh"

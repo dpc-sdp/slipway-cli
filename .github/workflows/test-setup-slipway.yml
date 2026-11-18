@@ -1,0 +1,83 @@
+name: Test setup-slipway
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: shellcheck
+        run: shellcheck actions/setup-slipway/install.sh
+
+  install:
+    name: Install (${{ matrix.os }}, ${{ matrix.version }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, macos-15-intel]
+        version: [latest, v0.35.0]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Slipway CLI
+        id: setup
+        uses: ./actions/setup-slipway
+        with:
+          version: ${{ matrix.version }}
+          api-base-url: https://slipway.example.com
+
+      - name: Check installation
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ matrix.version }}
+          INSTALLED_VERSION: ${{ steps.setup.outputs.version }}
+        run: |
+          set -euo pipefail
+          command -v slipway
+          command -v slipway-plugin-follow-run
+          slipway --version | grep -Fq "slipway version ${INSTALLED_VERSION#v}"
+          slipway support plugin list | grep -Fq "follow-run"
+          if [[ "$REQUESTED_VERSION" != "latest" && "$INSTALLED_VERSION" != "$REQUESTED_VERSION" ]]; then
+            echo "::error::Requested ${REQUESTED_VERSION} but installed ${INSTALLED_VERSION}"
+            exit 1
+          fi
+          test "$SLIPWAY_BASE_URL" = "https://slipway.example.com"
+          test "$RSH_PROFILE" = "gha"
+
+  missing-version:
+    name: Fails on a missing version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Slipway CLI
+        id: setup
+        continue-on-error: true
+        uses: ./actions/setup-slipway
+        with:
+          version: v0.0.0
+          api-base-url: https://slipway.example.com
+
+      - name: Check the step failed
+        if: steps.setup.outcome != 'failure'
+        run: |
+          echo "::error::setup-slipway should fail for a version that does not exist"
+          exit 1
